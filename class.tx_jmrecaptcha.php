@@ -79,7 +79,10 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 	 * @return string
 	 */
 	protected function renderNoCaptcha() {
-		return '<div class="g-recaptcha" data-sitekey="' . htmlspecialchars($this->conf['public_key']) . '"></div>';
+		$content = '<div class="g-recaptcha" data-sitekey="' . htmlspecialchars($this->conf['public_key']) . '"></div>
+			<script type="text/javascript" src="' . htmlspecialchars($this->conf['server']) . '.js?hl=' . $this->getLanguageCode() .'"></script>';
+
+		return $content;
 	}
 
 	/**
@@ -99,7 +102,7 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 
 		// Default settings
 		$recaptchaOptions = array(
-			'lang' => self::jsQuote('en'),
+			'lang' => self::jsQuote($this->getLanguageCode()),
 		);
 
 		// Theme
@@ -115,15 +118,6 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 		// TabIndex
 		if (!empty($this->conf['custom_theme_widget'])) {
 			$recaptchaOptions['custom_theme_widget'] = self::jsQuote($this->conf['custom_theme_widget']);
-		}
-
-		// Language detection
-		if (!empty($this->conf['lang'])) {
-			// language from plugin configuration
-			$recaptchaOptions['lang'] = self::jsQuote($this->conf['lang']);
-		} elseif (!empty($this->typoscriptFrontendController->tmpl->setup['config.']['language'])) {
-			// automatic language detection (TYPO3 settings)
-			$recaptchaOptions['lang'] = self::jsQuote($this->typoscriptFrontendController->tmpl->setup['config.']['language']);
 		}
 
 		// Custom translations
@@ -164,6 +158,18 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 	 */
 	protected static function jsQuote($value) {
 		return '\'' . addslashes((string)$value) . '\'';
+	}
+
+	protected function getLanguageCode() {
+		$languageCode = 'en';
+		if (!empty($this->conf['lang'])) {
+			// language from plugin configuration
+			$languageCode = $this->conf['lang'];
+		} elseif (!empty($this->typoscriptFrontendController->tmpl->setup['config.']['language'])) {
+			// automatic language detection (TYPO3 settings)
+			$languageCode = $this->typoscriptFrontendController->tmpl->setup['config.']['language'];
+		}
+		return $languageCode;
 	}
 
 	/**
