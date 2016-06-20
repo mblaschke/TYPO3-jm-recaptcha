@@ -39,6 +39,26 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 	public $conf;
 
 	/**
+	 * List of valid parameters of the no-CAPTCHA variant
+	 * @see https://developers.google.com/recaptcha/docs/display#render_param
+	 *
+	 * @var array
+	 */
+	private $validNoCaptchaParameters = array(
+		'sitekey', 'theme', 'type', 'size', 'tabindex', 'callback', 'expired-callback'
+	);
+
+	/**
+	 * Mapping of conf to no-CAPTCHA parameters
+	 *
+	 * @var array
+	 */
+	private $conf2NoCaptchaParametersMapping = array(
+		'public_key' => 'sitekey',
+		'expired_callback' => 'expired-callback'
+	);
+
+	/**
 	 * @var \TYPO3\CMS\Frontend\Controller\TypoScriptFrontendController
 	 */
 	public $typoscriptFrontendController;
@@ -79,9 +99,34 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 	 * @return string
 	 */
 	protected function renderNoCaptcha() {
-		$content = '<script type="text/javascript" src="' . htmlspecialchars($this->conf['server']) . '.js?hl=' . htmlspecialchars($this->conf['lang']) . '"></script>';
-		$content .= '<div class="g-recaptcha" data-sitekey="' . htmlspecialchars($this->conf['public_key']) . '" data-theme="' . htmlspecialchars($this->conf['theme']) . '"></div>';
+		$language = $this->getLanguageCode(null);
+		$languageParameter = '';
+		if (!empty($language)) {
+			$languageParameter = 'hl=' . $language;
+		}
+
+		$content = '<script type="text/javascript" src="' . htmlspecialchars($this->conf['server'] . '.js?' . $languageParameter) . '"></script>';
+		$content .= '<div class="g-recaptcha"' . $this->getNoCaptchaParameters() . '></div>';
 		return $content;
+	}
+
+	/**
+	 * Get all available parameters as collected data-attributes for no-CAPTCHA variant
+	 * @return string $noCaptchaParameters
+	 */
+	protected function getNoCaptchaParameters() {
+		$noCaptchaParameters = ' ';
+
+		foreach ($this->conf as $parameter => $value) {
+			if (!empty($value)) {
+				$parameter = isset($this->conf2NoCaptchaParametersMapping[$parameter]) ? $this->conf2NoCaptchaParametersMapping[$parameter] : $parameter;
+				if (in_array($parameter, $this->validNoCaptchaParameters)) {
+					$noCaptchaParameters .= 'data-' . $parameter . '="' . htmlspecialchars($value) . '" ';
+				}
+			}
+		}
+
+		return $noCaptchaParameters;
 	}
 
 	/**
@@ -101,7 +146,7 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 
 		// Default settings
 		$recaptchaOptions = array(
-			'lang' => self::jsQuote('en'),
+			'lang' => self::jsQuote($this->getLanguageCode()),
 		);
 
 		// Theme
@@ -117,15 +162,6 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 		// TabIndex
 		if (!empty($this->conf['custom_theme_widget'])) {
 			$recaptchaOptions['custom_theme_widget'] = self::jsQuote($this->conf['custom_theme_widget']);
-		}
-
-		// Language detection
-		if (!empty($this->conf['lang'])) {
-			// language from plugin configuration
-			$recaptchaOptions['lang'] = self::jsQuote($this->conf['lang']);
-		} elseif (!empty($this->typoscriptFrontendController->tmpl->setup['config.']['language'])) {
-			// automatic language detection (TYPO3 settings)
-			$recaptchaOptions['lang'] = self::jsQuote($this->typoscriptFrontendController->tmpl->setup['config.']['language']);
 		}
 
 		// Custom translations
@@ -166,6 +202,29 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 	 */
 	protected static function jsQuote($value) {
 		return '\'' . addslashes((string)$value) . '\'';
+	}
+
+	/**
+	 * Get the language code
+	 *
+	 * Get from extension configuration first, fallback to TYPO3 setting config.language.
+	 *
+	 * @return string
+	 */
+	protected function getLanguageCode($fallback = 'en') {
+		$languageCode = '';
+
+		if (!empty($fallback)) {
+			$languageCode = $fallback;
+		}
+		if (!empty($this->conf['lang'])) {
+			// language from plugin configuration
+			$languageCode = $this->conf['lang'];
+		} elseif (!empty($this->typoscriptFrontendController->tmpl->setup['config.']['language'])) {
+			// automatic language detection (TYPO3 settings)
+			$languageCode = $this->typoscriptFrontendController->tmpl->setup['config.']['language'];
+		}
+		return $languageCode;
 	}
 
 	/**
