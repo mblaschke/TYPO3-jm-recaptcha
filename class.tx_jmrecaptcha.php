@@ -99,17 +99,35 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 	 * @return string
 	 */
 	protected function renderNoCaptcha() {
+		$this->addJsToPageRenderer();
+		$content = '<div class="g-recaptcha"' . $this->getNoCaptchaParameters() . '></div>';
+		return $content;
+	}
+
+
+	/**
+	 * Add the required JavaScript-Code to the PageRenderer
+	 */
+	protected function addJsToPageRenderer() {
+		
 		$language = $this->getLanguageCode(null);
 		$languageParameter = '';
 		if (!empty($language)) {
 			$languageParameter = 'hl=' . $language;
 		}
-
-		$content = '<script type="text/javascript" src="' . htmlspecialchars($this->conf['server'] . '.js?' . $languageParameter) . '"></script>';
-		$content .= '<div class="g-recaptcha"' . $this->getNoCaptchaParameters() . '></div>';
-		return $content;
+		
+		if ($this->conf['captcha_type'] === 'nocaptcha') {
+			$ext_script = $this->conf['server'] . '.js?' . $languageParameter .'&onload=jmRecaptcha_renderGoogleCaptchas&render=explicit';
+			$local_script = 'typo3conf/ext/jm_recaptcha/Resources/Public/Js/jm_recaptcha.js';
+		} else {
+			// ToDo: Add JS for recaptcha
+			return NULL;
+		}
+		
+		$GLOBALS['TSFE']->getPageRenderer()->addJsLibrary('jmrecaptcha_nocaptcha', $ext_script);
+		$GLOBALS['TSFE']->getPageRenderer()->addJsLibrary('jmrecaptcha_js', $local_script);
 	}
-
+	
 	/**
 	 * Get all available parameters as collected data-attributes for no-CAPTCHA variant
 	 * @return string $noCaptchaParameters
@@ -299,23 +317,43 @@ class tx_jmrecaptcha extends \TYPO3\CMS\Frontend\Plugin\AbstractPlugin {
 		}
 
 		if ($this->conf['captcha_type'] === 'nocaptcha') {
+					
 			$ch = curl_init();
 			curl_setopt($ch,CURLOPT_URL, $this->conf['verify_server']);
 			curl_setopt($ch,CURLOPT_POST, count($data));
 			curl_setopt($ch,CURLOPT_POSTFIELDS, \TYPO3\CMS\Core\Utility\GeneralUtility::implodeArrayForUrl('', $data));
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            if ($proxy_host = $GLOBALS['TYPO3_CONF_VARS']['HTTP']['proxy_host']) {
-                if (!($proxy_port = $GLOBALS['TYPO3_CONF_VARS']['HTTP']['proxy_port'])) {
-                    throw new \TYPO3\CMS\Core\Exception('Proxy host set, but no proxy port. Please specify proxy port too');
-                }
-                curl_setopt($ch, CURLOPT_PROXY, $proxy_host . ':' . $proxy_port);
-            }
+			if ($proxy_host = $GLOBALS['TYPO3_CONF_VARS']['HTTP']['proxy_host']) {
+				if (!($proxy_port = $GLOBALS['TYPO3_CONF_VARS']['HTTP']['proxy_port'])) {
+					throw new \TYPO3\CMS\Core\Exception('Proxy host set, but no proxy port. Please specify proxy port too');
+				}
+				curl_setopt($ch, CURLOPT_PROXY, $proxy_host . ':' . $proxy_port);
+			}
 			$response = json_decode(curl_exec($ch), TRUE);
+			curl_close($ch);
+
+			// if curl failed and no data was returned: try using stream
+			if (!$response) {
+				$ctx = stream_context_create(array('http'=>
+					array(
+						'timeout' => 1000,
+					),
+					'ssl' => array(
+						'verify_peer'      => false,
+						'verify_peer_name' => false,
+					)
+				));
+
+				$json = file_get_contents($this->conf['verify_server']."?secret=".$data['secret']."&response=".$data['response']."&remoteip=".$data['remoteip'], FALSE, $ctx);
+				$response = json_decode($json, TRUE);
+			}
+
 			$result = array(
 				$response['success'],
 				isset($response['error-codes']) ? $response['error-codes'][0] : ''
 			);
-			curl_close($ch);
+			
+			
 		} elseif ($this->conf['captcha_type'] === 'recaptcha') {
 			$paramStr = \TYPO3\CMS\Core\Utility\GeneralUtility::implodeArrayForUrl('', $data);
 			$ret = \TYPO3\CMS\Core\Utility\GeneralUtility::getURL($this->conf['verify_server'] . '?' . $paramStr);
